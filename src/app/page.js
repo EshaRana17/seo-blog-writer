@@ -68,6 +68,14 @@ export default function Home() {
   }
 
   async function run() {
+  if (!topic.trim() || running) return
+
+  // ADD THIS CHECK
+  if (!isSignedIn) {
+    setError('Please sign in first to generate a blog. Click "Sign In" in the top right corner.')
+    return
+  }
+  // rest of code...
     if (!topic.trim() || running) return
 
     setRunning(true)
