@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #07070f;
+  color: #e8e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+}
+
+.prose-blog h1 { font-size: 1.9rem; font-weight: 700; margin: 1.5rem 0 1rem; line-height: 1.25; color: #f0f0ff; }
+.prose-blog h2 { font-size: 1.35rem; font-weight: 600; margin: 2rem 0 0.75rem; color: #a78bfa; line-height: 1.3; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05); }
+.prose-blog h3 { font-size: 1.05rem; font-weight: 600; margin: 1.4rem 0 0.5rem; color: #c4b5fd; }
+.prose-blog p { margin-bottom: 1rem; line-height: 1.85; color: #c8c8d8; font-size: 15px; }
+.prose-blog ul, .prose-blog ol { margin: 0.6rem 0 1rem 1.4rem; }
+.prose-blog li { margin-bottom: 0.45rem; line-height: 1.75; color: #c8c8d8; font-size: 15px; }
+.prose-blog strong { color: #e8e8f0; font-weight: 600; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.fade-in { animation: fadeIn 0.4s ease forwards; }
+
+input::placeholder { color: rgba(255,255,255,0.18); }
+input:focus { outline: none; border-color: rgba(139,92,246,0.5) !important; box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
