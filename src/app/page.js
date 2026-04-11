@@ -1,18 +1,20 @@
 ﻿'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import Header from '@/components/Header'
+import AuthModal from '@/components/AuthModal'
 
 const PIPELINE_STEPS = [
-  { id: 'keywords',  icon: '🔑', label: 'Keyword Research',       desc: 'Generating long-tail & secondary keywords' },
-  { id: 'meta',      icon: '🏷️', label: 'Meta Data',              desc: 'Title, description & permalink' },
-  { id: 'serp',      icon: '🔍', label: 'SERP Search',            desc: 'Searching Google via Firecrawl' },
-  { id: 'scraping',  icon: '🕷️', label: 'Page Scraping',          desc: 'Reading top 10 ranking pages' },
-  { id: 'semantic',  icon: '🧠', label: 'Semantic Keywords',       desc: 'LSI & entity extraction' },
-  { id: 'structure', icon: '🏗️', label: 'Blog Structure',         desc: '10-section H1/H2/H3 plan' },
-  { id: 'writing',   icon: '✍️', label: 'Writing Blog',           desc: '400 words × 10 sections' },
-  { id: 'grammar',   icon: '✅', label: 'Quality Check',          desc: 'Grammar, SEO & E-E-A-T polish' },
-  { id: 'detection', icon: '🧪', label: 'AI & Plagiarism Check',   desc: 'Estimating AI% and plagiarism risk' },
-  { id: 'image',     icon: '🖼️', label: 'Cover Image',            desc: 'AI-generated 16:9 cover' },
+  { id: 'keywords',  icon: '🔑', label: 'Keyword Research',      desc: 'Generating long-tail & secondary keywords' },
+  { id: 'meta',      icon: '🏷️', label: 'Meta Data',             desc: 'Title, description & permalink' },
+  { id: 'serp',      icon: '🔍', label: 'SERP Search',           desc: 'Searching Google via Firecrawl' },
+  { id: 'scraping',  icon: '🕷️', label: 'Page Scraping',         desc: 'Reading top 10 ranking pages' },
+  { id: 'semantic',  icon: '🧠', label: 'Semantic Keywords',      desc: 'LSI & entity extraction' },
+  { id: 'structure', icon: '🏗️', label: 'Blog Structure',        desc: '10-section H1/H2/H3 plan' },
+  { id: 'writing',   icon: '✍️', label: 'Writing Blog',          desc: '400 words × 10 sections' },
+  { id: 'grammar',   icon: '✅', label: 'Quality Check',         desc: 'Grammar, SEO & E-E-A-T polish' },
+  { id: 'detection', icon: '🧪', label: 'AI & Plagiarism Check',  desc: 'Estimating AI% and plagiarism risk' },
+  { id: 'image',     icon: '🖼️', label: 'Cover Image',           desc: 'AI-generated 16:9 cover' },
 ]
 
 function mdToHtml(md) {
@@ -34,19 +36,17 @@ const C = {
   bg: '#07070f',
   card: 'rgba(255,255,255,0.03)',
   border: 'rgba(255,255,255,0.07)',
-  borderHi: 'rgba(139,92,246,0.4)',
   purple: '#8b5cf6',
   purpleLight: '#a78bfa',
-  purpleDim: 'rgba(139,92,246,0.15)',
   green: '#22c55e',
-  greenDim: 'rgba(34,197,94,0.12)',
-  blue: '#60a5fa',
   textPrimary: '#f0f0ff',
   textSecondary: '#9090a8',
   textDim: 'rgba(255,255,255,0.25)',
 }
 
 export default function Home() {
+  const [user, setUser] = useState(null)
+  const [showAuth, setShowAuth] = useState(false)
   const [topic, setTopic] = useState('')
   const [commercialIntent, setCommercialIntent] = useState('informational')
   const [running, setRunning] = useState(false)
@@ -57,10 +57,18 @@ export default function Home() {
   const [d, setD] = useState({
     primaryKeyword: '', secondaryKeywords: [], metaTitle: '',
     metaDescription: '', permalink: '', semanticKeywords: [],
-    serpData: null, structure: [], finalBlog: '', coverImageUrl: '', imagePrompt: '', imageGeneratedVia: '',
+    serpData: null, structure: [], finalBlog: '', coverImageUrl: '',
+    imagePrompt: '', imageGeneratedVia: '',
     aiLikelihoodPercent: null, plagiarismRiskPercent: null, qualityReasons: [],
   })
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(data => { if (data.user) setUser(data.user) })
+      .catch(() => {})
+  }, [])
 
   function setStep(id, status, msg) {
     setSteps(p => ({ ...p, [id]: status }))
@@ -68,22 +76,25 @@ export default function Home() {
   }
 
   async function run() {
-  if (!topic.trim() || running) return
-
-  // ADD THIS CHECK
-  if (!isSignedIn) {
-    setError('Please sign in first to generate a blog. Click "Sign In" in the top right corner.')
-    return
-  }
-  // rest of code...
-    if (!topic.trim() || running) return
+    if (!topic.trim()) return
+    if (!user) {
+      setShowAuth(true)
+      return
+    }
+    if (running) return
 
     setRunning(true)
     setError('')
     setSteps({})
     setStepMsg({})
     setSections([])
-    setD({ primaryKeyword:'',secondaryKeywords:[],metaTitle:'',metaDescription:'',permalink:'',semanticKeywords:[],serpData:null,structure:[],finalBlog:'',coverImageUrl:'',imagePrompt:'',imageGeneratedVia:'',aiLikelihoodPercent:null,plagiarismRiskPercent:null,qualityReasons:[] })
+    setD({
+      primaryKeyword: '', secondaryKeywords: [], metaTitle: '',
+      metaDescription: '', permalink: '', semanticKeywords: [],
+      serpData: null, structure: [], finalBlog: '', coverImageUrl: '',
+      imagePrompt: '', imageGeneratedVia: '',
+      aiLikelihoodPercent: null, plagiarismRiskPercent: null, qualityReasons: [],
+    })
     setTab('live')
 
     try {
@@ -92,30 +103,58 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, commercialIntent }),
       })
+
+      if (res.status === 401) {
+        setShowAuth(true)
+        setRunning(false)
+        return
+      }
+
+      if (!res.ok) {
+        setError('Server error. Please try again.')
+        setRunning(false)
+        return
+      }
+
       const reader = res.body.getReader()
       const dec = new TextDecoder()
       let buf = ''
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buf += dec.decode(value, { stream: true })
-        const lines = buf.split('\n'); buf = lines.pop()
+        const lines = buf.split('\n')
+        buf = lines.pop()
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           try {
             const { event, data: p } = JSON.parse(line.slice(6))
             if (event === 'step') setStep(p.id, p.status, p.msg)
             else if (event === 'data') setD(prev => ({ ...prev, ...p }))
-            else if (event === 'section_start') setSections(prev => { const n=[...prev]; n[p.index]={h2:p.h2,content:null,writing:true}; return n })
-            else if (event === 'section_done') { setSections(prev => { const n=[...prev]; n[p.index]={...n[p.index],content:p.content,writing:false}; return n }) }
+            else if (event === 'section_start') {
+              setSections(prev => {
+                const n = [...prev]
+                n[p.index] = { h2: p.h2, content: null, writing: true }
+                return n
+              })
+            }
+            else if (event === 'section_done') {
+              setSections(prev => {
+                const n = [...prev]
+                n[p.index] = { ...n[p.index], content: p.content, writing: false }
+                return n
+              })
+            }
             else if (event === 'error') setError(p.message)
             else if (event === 'done') setTab('overview')
           } catch {}
         }
       }
     } catch (e) {
-      setError(e.message)
+      setError(e.message || 'Something went wrong.')
     }
+
     setRunning(false)
   }
 
@@ -125,67 +164,89 @@ export default function Home() {
   const sectionsWritten = sections.filter(s => !s?.writing && s?.content).length
 
   function downloadMd() {
-    const fm = `---\ntitle: "${d.metaTitle}"\ndescription: "${d.metaDescription}"\nprimary_keyword: "${d.primaryKeyword}"\npermalink: "/${d.permalink}"\nsecondary_keywords: [${d.secondaryKeywords.map(k=>`"${k}"`).join(', ')}]\n---\n\n`
+    const fm = `---\ntitle: "${d.metaTitle}"\ndescription: "${d.metaDescription}"\nprimary_keyword: "${d.primaryKeyword}"\npermalink: "/${d.permalink}"\nsecondary_keywords: [${d.secondaryKeywords.map(k => `"${k}"`).join(', ')}]\n---\n\n`
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([fm + d.finalBlog], { type: 'text/markdown' }))
     a.download = (d.permalink || 'blog') + '.md'
     a.click()
   }
-  function copy(txt, label='Copied!') { navigator.clipboard.writeText(txt).then(()=>alert(label)) }
 
   const hasResults = !!d.finalBlog
   const tabs = hasResults
-    ? [{ id:'overview', label:'Overview' }, { id:'blog', label:`Blog (${wordCount.toLocaleString()}w)` }, { id:'serp', label:'SERP Data' }, { id:'live', label:'Pipeline' }]
-    : [{ id:'live', label:'Pipeline' }]
+    ? [
+        { id: 'overview', label: 'Overview' },
+        { id: 'blog', label: `Blog (${wordCount.toLocaleString()}w)` },
+        { id: 'serp', label: 'SERP Data' },
+        { id: 'live', label: 'Pipeline' },
+      ]
+    : [{ id: 'live', label: 'Pipeline' }]
 
   return (
-    <div style={{ minHeight:'100vh', background: C.bg, paddingBottom: 80 }}>
-      <div style={{ maxWidth:920, margin:'0 auto', padding:'40px 20px' }}>
+    <div style={{ minHeight: '100vh', background: C.bg, paddingBottom: 80 }}>
+
+      <Header user={user} onAuthChange={setUser} />
+
+      <div style={{ maxWidth: 920, margin: '0 auto', padding: '40px 20px' }}>
+
         {/* Hero */}
-        <div style={{ textAlign:'center', marginBottom:52 }}>
-          <h1 style={{ fontSize:'clamp(30px,5vw,54px)', fontWeight:800, lineHeight:1.1, letterSpacing:'-1.5px', marginBottom:18, color: C.textPrimary }}>
+        <div style={{ textAlign: 'center', marginBottom: 52 }}>
+          <h1 style={{ fontSize: 'clamp(30px,5vw,54px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 18, color: C.textPrimary }}>
             Real SERP Research.<br />
-            <span style={{ background:'linear-gradient(135deg,#7c3aed,#a855f7,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+            <span style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
               4000‑Word Blog.
             </span>
           </h1>
-          <p style={{ color: C.textSecondary, fontSize:16, maxWidth:500, margin:'0 auto', lineHeight:1.7 }}>
+          <p style={{ color: C.textSecondary, fontSize: 16, maxWidth: 500, margin: '0 auto', lineHeight: 1.7 }}>
             Firecrawl scrapes Google's top results. Grok writes a fully SEO-optimized blog with real SERP research and competitor analysis.
           </p>
-
-          <div style={{ display:'flex', justifyContent:'center', gap:24, marginTop:32, flexWrap:'wrap' }}>
-            {['Real SERP Crawling','Competitor Analysis','Semantic SEO','E-E-A-T Optimized','4000 Words','AI Cover Image'].map(f => (
-              <div key={f} style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color: C.textSecondary }}>
-                <span style={{ color: C.green, fontSize:11 }}>✓</span> {f}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 32, flexWrap: 'wrap' }}>
+            {['Real SERP Crawling', 'Competitor Analysis', 'Semantic SEO', 'E-E-A-T Optimized', '4000 Words', 'AI Cover Image'].map(f => (
+              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textSecondary }}>
+                <span style={{ color: C.green, fontSize: 11 }}>✓</span> {f}
               </div>
             ))}
           </div>
         </div>
 
+        {/* Not logged in banner */}
+        {!user && (
+          <div style={{ marginBottom: 20, padding: '14px 20px', borderRadius: 12, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <span style={{ color: C.textSecondary, fontSize: 14 }}>
+              Sign in to start generating SEO blogs for free.
+            </span>
+            <button
+              onClick={() => setShowAuth(true)}
+              style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Sign Up Free →
+            </button>
+          </div>
+        )}
+
         {/* Input */}
-        <div style={{ background: C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:20, marginBottom:20 }}>
-          <label style={{ display:'block', fontSize:11, color: C.textDim, fontWeight:600, letterSpacing:0.8, textTransform:'uppercase', marginBottom:10 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
+          <label style={{ display: 'block', fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>
             Blog Topic
           </label>
-          <div style={{ display:'flex', gap:10 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
             <input
               value={topic}
               onChange={e => setTopic(e.target.value)}
-              onKeyDown={e => e.key==='Enter' && run()}
+              onKeyDown={e => e.key === 'Enter' && run()}
               placeholder="e.g. Best CRM software for small businesses in 2025"
               disabled={running}
-              style={{ flex:1, height:48, padding:'0 16px', borderRadius:10, background:'rgba(255,255,255,0.05)', border:`1px solid ${C.border}`, color: C.textPrimary, fontSize:15, transition:'border 0.2s' }}
+              style={{ flex: 1, height: 48, padding: '0 16px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.textPrimary, fontSize: 15, outline: 'none' }}
             />
             <button
               onClick={run}
-              disabled={running || !topic.trim()}
-              style={{ height:48, padding:'0 26px', borderRadius:10, border:'none', background: running?'rgba(255,255,255,0.07)':'linear-gradient(135deg,#7c3aed,#a855f7)', color:'#fff', fontSize:14, fontWeight:700, cursor: running?'not-allowed':'pointer', whiteSpace:'nowrap', letterSpacing:'-0.2px' }}
+              disabled={running}
+              style={{ height: 48, padding: '0 26px', borderRadius: 10, border: 'none', background: running ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
             >
-              {running ? 'Generating…' : 'Generate →'}
+              {running ? 'Generating…' : user ? 'Generate →' : 'Sign In to Generate →'}
             </button>
           </div>
 
-          {/* Content Type Selection */}
+          {/* Content Type */}
           <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'center' }}>
             <span style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase' }}>Content Type:</span>
             {['informational', 'commercial'].map(type => (
@@ -193,15 +254,7 @@ export default function Home() {
                 key={type}
                 onClick={() => setCommercialIntent(type)}
                 disabled={running}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 6,
-                  border: `1px solid ${commercialIntent === type ? C.purple : C.border}`,
-                  background: commercialIntent === type ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.02)',
-                  color: commercialIntent === type ? C.purpleLight : C.textSecondary,
-                  fontSize: 12,
-                  cursor: running ? 'not-allowed' : 'pointer',
-                }}
+                style={{ padding: '6px 14px', borderRadius: 6, border: `1px solid ${commercialIntent === type ? C.purple : C.border}`, background: commercialIntent === type ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.02)', color: commercialIntent === type ? C.purpleLight : C.textSecondary, fontSize: 12, cursor: running ? 'not-allowed' : 'pointer' }}
               >
                 {type === 'commercial' ? 'Commercial' : 'Informational'}
               </button>
@@ -210,125 +263,183 @@ export default function Home() {
 
           {error && (
             <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'rgba(255,99,99,0.12)', border: '1px solid rgba(255,99,99,0.2)', color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>
-              {error}
+              ⚠️ {error}
             </div>
           )}
         </div>
 
-        {/* Results */}
-        {hasResults && (
+        {/* Pipeline + Results */}
+        {(running || hasResults) && (
           <div style={{ marginBottom: 40 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <div style={{ fontSize: 14, color: C.textSecondary }}>Word count</div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{wordCount.toLocaleString()}</div>
-                <div style={{ fontSize: 14, color: C.textSecondary }}>{sectionsWritten} / 10 sections</div>
+
+            {/* Progress bar */}
+            {running && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textSecondary, marginBottom: 6 }}>
+                  <span>Pipeline progress</span>
+                  <span>{progress}%</span>
+                </div>
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99 }}>
+                  <div style={{ height: 4, borderRadius: 99, background: 'linear-gradient(90deg,#7c3aed,#a855f7)', width: `${progress}%`, transition: 'width 0.5s ease' }} />
+                </div>
               </div>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button onClick={downloadMd} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer' }}>
-                  Download Markdown
-                </button>
+            )}
+
+            {hasResults && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 14, color: C.textSecondary }}>
+                  <strong style={{ color: '#fff' }}>{wordCount.toLocaleString()}</strong> words &nbsp;·&nbsp; {sectionsWritten}/10 sections
+                </div>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+                  <button onClick={downloadMd} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontSize: 13 }}>
+                    ↓ Download Markdown
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', gap: 10, borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', padding: '10px 12px' }}>
-                {tabs.map((t) => (
+              <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)', padding: '10px 12px' }}>
+                {tabs.map(t => (
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: 10,
-                      border: 'none',
-                      background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent',
-                      color: tab === t.id ? '#fff' : C.textSecondary,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: tab === t.id ? 700 : 500,
-                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? '#fff' : C.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: tab === t.id ? 700 : 500 }}
                   >
                     {t.label}
                   </button>
                 ))}
               </div>
-              <div style={{ padding: 18, minHeight: 260 }}>
+
+              <div style={{ padding: 20, minHeight: 260 }}>
+
+                {/* Pipeline tab */}
                 {tab === 'live' && (
-                  <div style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.6 }}>
-                    <div style={{ marginBottom: 12 }}>Pipeline progress: {progress}%</div>
-                    <div style={{ display: 'grid', gap: 10 }}>
-                      {PIPELINE_STEPS.map((s) => (
-                        <div key={s.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                          <div style={{ fontSize: 18 }}>{s.icon}</div>
-                          <div>
-                            <div style={{ fontWeight: 700, color: '#fff' }}>{s.label}</div>
-                            <div style={{ fontSize: 12, color: C.textSecondary }}>{stepMsg[s.id] || s.desc}</div>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {PIPELINE_STEPS.map(s => {
+                      const status = steps[s.id]
+                      return (
+                        <div key={s.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', borderRadius: 10, background: status === 'active' ? 'rgba(139,92,246,0.07)' : 'transparent', border: `1px solid ${status === 'active' ? 'rgba(139,92,246,0.2)' : 'transparent'}`, transition: 'all 0.3s' }}>
+                          <div style={{ fontSize: 20, marginTop: 1 }}>{s.icon}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, color: status === 'done' ? C.green : status === 'active' ? C.purpleLight : '#fff', fontSize: 14 }}>{s.label}</div>
+                            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>{stepMsg[s.id] || s.desc}</div>
                           </div>
-                          <div style={{ marginLeft: 'auto', color: steps[s.id] === 'done' ? C.green : steps[s.id] === 'error' ? '#f87171' : C.textSecondary, fontWeight: 700 }}>
-                            {steps[s.id] === 'done' ? '✓' : steps[s.id] === 'error' ? '!' : '…'}
+                          <div style={{ fontSize: 16, fontWeight: 800, color: status === 'done' ? C.green : status === 'error' ? '#f87171' : status === 'active' ? C.purpleLight : C.textDim }}>
+                            {status === 'done' ? '✓' : status === 'error' ? '✕' : status === 'active' ? '⟳' : '·'}
                           </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Overview tab */}
+                {tab === 'overview' && (
+                  <div style={{ color: C.textSecondary, lineHeight: 1.8 }}>
+                    {d.coverImageUrl && (
+                      <img src={d.coverImageUrl} alt="Cover" style={{ width: '100%', borderRadius: 12, marginBottom: 20, aspectRatio: '16/9', objectFit: 'cover' }} />
+                    )}
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {[
+                        { label: 'Meta Title', value: d.metaTitle },
+                        { label: 'Meta Description', value: d.metaDescription },
+                        { label: 'Primary Keyword', value: d.primaryKeyword },
+                        { label: 'Permalink', value: d.permalink ? `/${d.permalink}` : '' },
+                      ].map(item => item.value && (
+                        <div key={item.label} style={{ padding: '12px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</div>
+                          <div style={{ color: '#fff', fontSize: 14 }}>{item.value}</div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-                {tab === 'overview' && (
-                  <div style={{ color: C.textSecondary, lineHeight: 1.7 }}>
-                    <div style={{ marginBottom: 14 }}>
-                      <strong>Meta title:</strong> {d.metaTitle}
-                    </div>
-                    <div style={{ marginBottom: 14 }}>
-                      <strong>Meta description:</strong> {d.metaDescription}
-                    </div>
-                    <div style={{ marginBottom: 14 }}>
-                      <strong>Primary keyword:</strong> {d.primaryKeyword}
-                    </div>
-                    <div style={{ marginBottom: 14 }}>
-                      <strong>Permalink:</strong> /{d.permalink}
-                    </div>
+
+                    {d.secondaryKeywords?.length > 0 && (
+                      <div style={{ marginTop: 16, padding: '12px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>Secondary Keywords</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {d.secondaryKeywords.map((k, i) => (
+                            <span key={i} style={{ padding: '4px 12px', borderRadius: 99, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: C.purpleLight, fontSize: 13 }}>{k}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {(d.aiLikelihoodPercent != null || d.plagiarismRiskPercent != null) && (
-                      <div style={{ marginTop: 18, padding: 14, borderRadius: 14, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)' }}>
-                        <div style={{ fontWeight: 800, color: '#fff', marginBottom: 8 }}>Quality signals (estimates)</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+                      <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
+                        <div style={{ fontWeight: 800, color: '#fff', marginBottom: 10, fontSize: 14 }}>Quality Signals</div>
+                        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
                           {d.aiLikelihoodPercent != null && (
-                            <div><strong>AI likelihood:</strong> {d.aiLikelihoodPercent}%</div>
+                            <div>
+                              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 2 }}>AI LIKELIHOOD</div>
+                              <div style={{ fontSize: 22, fontWeight: 800, color: d.aiLikelihoodPercent > 50 ? '#f87171' : d.aiLikelihoodPercent > 25 ? '#fbbf24' : C.green }}>{d.aiLikelihoodPercent}%</div>
+                            </div>
                           )}
                           {d.plagiarismRiskPercent != null && (
-                            <div><strong>Plagiarism risk:</strong> {d.plagiarismRiskPercent}%</div>
+                            <div>
+                              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 2 }}>PLAGIARISM RISK</div>
+                              <div style={{ fontSize: 22, fontWeight: 800, color: d.plagiarismRiskPercent > 30 ? '#f87171' : C.green }}>{d.plagiarismRiskPercent}%</div>
+                            </div>
                           )}
                         </div>
                         {Array.isArray(d.qualityReasons) && d.qualityReasons.length > 0 && (
-                          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
-                            {d.qualityReasons.slice(0, 4).map((r, i) => (
-                              <li key={i} style={{ marginBottom: 6 }}>{r}</li>
-                            ))}
+                          <ul style={{ marginTop: 10, paddingLeft: 18, color: C.textSecondary, fontSize: 13 }}>
+                            {d.qualityReasons.slice(0, 4).map((r, i) => <li key={i} style={{ marginBottom: 4 }}>{r}</li>)}
                           </ul>
                         )}
-                        <div style={{ marginTop: 10, fontSize: 12, color: C.textSecondary }}>
-                          Note: these are pattern-based estimates unless a detector API is connected.
-                        </div>
                       </div>
                     )}
                   </div>
                 )}
+
+                {/* SERP tab */}
                 {tab === 'serp' && (
-                  <pre style={{ color: C.textSecondary, fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(d.serpData, null, 2)}</pre>
+                  <pre style={{ color: C.textSecondary, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
+                    {JSON.stringify(d.serpData, null, 2)}
+                  </pre>
                 )}
+
+                {/* Blog tab */}
                 {tab === 'blog' && (
-                  <div style={{ color: '#fff', lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(d.finalBlog) }} />
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(d.finalBlog); alert('Copied!') }}
+                        style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff', cursor: 'pointer', fontSize: 12 }}
+                      >
+                        Copy Raw Markdown
+                      </button>
+                    </div>
+                    <div
+                      style={{ color: '#e0e0f0', lineHeight: 1.8, fontSize: 15 }}
+                      dangerouslySetInnerHTML={{ __html: mdToHtml(d.finalBlog) }}
+                    />
+                  </div>
                 )}
+
               </div>
             </div>
 
-            <div style={{ marginTop: 18, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-              <button onClick={downloadMd} style={{ padding: '10px 16px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-                Download Markdown
-              </button>
-            </div>
+            {hasResults && (
+              <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button onClick={downloadMd} style={{ padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                  ↓ Download Markdown
+                </button>
+              </div>
+            )}
+
           </div>
         )}
+
       </div>
+
+      {showAuth && (
+        <AuthModal
+          onClose={() => setShowAuth(false)}
+          onSuccess={(u) => { setUser(u); setShowAuth(false) }}
+        />
+      )}
+
     </div>
   )
 }
-

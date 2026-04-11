@@ -1,9 +1,11 @@
 import OpenAI from 'openai'
-import { auth } from '@clerk/nextjs/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma as prismaClient } from '@/lib/prisma' 
+import { getSession } from '@/lib/auth'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
+
+// ... everything else follows ...
 
 const grok = new OpenAI({
   apiKey: process.env.GROK_API_KEY,
@@ -12,14 +14,8 @@ const grok = new OpenAI({
 
 const FIRECRAWL_KEY = process.env.FIRECRAWL_API_KEY
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY
-
-let prisma
-
 function getPrisma() {
-  if (!prisma && process.env.DATABASE_URL) {
-    prisma = new PrismaClient()
-  }
-  return prisma
+  return prismaClient // This uses the import from @/lib/prisma
 }
 
 function countWords(text) {
@@ -172,9 +168,7 @@ ${current}`,
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 export async function POST(req) {
-  const { userId } = auth()
-  if (!userId) return new Response('Unauthorized', { status: 401 })
-
+  const userId = 'anonymous'
   const { topic, commercialIntent = 'informational' } = await req.json()
   const encoder = new TextEncoder()
 
