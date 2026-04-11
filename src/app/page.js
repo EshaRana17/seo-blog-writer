@@ -1,6 +1,6 @@
-﻿'use client'
-
-import { useState, useEffect } from 'react'
+﻿"use client"
+import { useState } from 'react'
+import { useUser } from "@clerk/nextjs"
 import Header from '@/components/Header'
 import AuthModal from '@/components/AuthModal'
 
@@ -10,9 +10,9 @@ const PIPELINE_STEPS = [
   { id: 'serp',      icon: '🔍', label: 'SERP Search',           desc: 'Searching Google via Firecrawl' },
   { id: 'scraping',  icon: '🕷️', label: 'Page Scraping',         desc: 'Reading top 10 ranking pages' },
   { id: 'semantic',  icon: '🧠', label: 'Semantic Keywords',      desc: 'LSI & entity extraction' },
-  { id: 'structure', icon: '🏗️', label: 'Blog Structure',        desc: '10-section H1/H2/H3 plan' },
-  { id: 'writing',   icon: '✍️', label: 'Writing Blog',          desc: '400 words × 10 sections' },
-  { id: 'grammar',   icon: '✅', label: 'Quality Check',         desc: 'Grammar, SEO & E-E-A-T polish' },
+  { id: 'structure', icon: '🏗️', label: 'Blog Structure',         desc: '10-section H1/H2/H3 plan' },
+  { id: 'writing',   icon: '✍️', label: 'Writing Blog',           desc: '400 words × 10 sections' },
+  { id: 'grammar',   icon: '✅', label: 'Quality Check',          desc: 'Grammar, SEO & E-E-A-T polish' },
   { id: 'detection', icon: '🧪', label: 'AI & Plagiarism Check',  desc: 'Estimating AI% and plagiarism risk' },
   { id: 'image',     icon: '🖼️', label: 'Cover Image',           desc: 'AI-generated 16:9 cover' },
 ]
@@ -45,7 +45,7 @@ const C = {
 }
 
 export default function Home() {
-  const [user, setUser] = useState(null)
+  const { isSignedIn, user, isLoaded } = useUser();
   const [showAuth, setShowAuth] = useState(false)
   const [topic, setTopic] = useState('')
   const [commercialIntent, setCommercialIntent] = useState('informational')
@@ -63,13 +63,6 @@ export default function Home() {
   })
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(r => r.json())
-      .then(data => { if (data.user) setUser(data.user) })
-      .catch(() => {})
-  }, [])
-
   function setStep(id, status, msg) {
     setSteps(p => ({ ...p, [id]: status }))
     if (msg) setStepMsg(p => ({ ...p, [id]: msg }))
@@ -77,7 +70,7 @@ export default function Home() {
 
   async function run() {
     if (!topic.trim()) return
-    if (!user) {
+    if (!isSignedIn) {
       setShowAuth(true)
       return
     }
@@ -154,7 +147,6 @@ export default function Home() {
     } catch (e) {
       setError(e.message || 'Something went wrong.')
     }
-
     setRunning(false)
   }
 
@@ -181,13 +173,13 @@ export default function Home() {
       ]
     : [{ id: 'live', label: 'Pipeline' }]
 
+  if (!isLoaded) return <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Loading session...</div>
+
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingBottom: 80 }}>
-
-      <Header user={user} onAuthChange={setUser} />
+      <Header user={user} />
 
       <div style={{ maxWidth: 920, margin: '0 auto', padding: '40px 20px' }}>
-
         {/* Hero */}
         <div style={{ textAlign: 'center', marginBottom: 52 }}>
           <h1 style={{ fontSize: 'clamp(30px,5vw,54px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 18, color: C.textPrimary }}>
@@ -199,21 +191,12 @@ export default function Home() {
           <p style={{ color: C.textSecondary, fontSize: 16, maxWidth: 500, margin: '0 auto', lineHeight: 1.7 }}>
             Firecrawl scrapes Google's top results. Grok writes a fully SEO-optimized blog with real SERP research and competitor analysis.
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 32, flexWrap: 'wrap' }}>
-            {['Real SERP Crawling', 'Competitor Analysis', 'Semantic SEO', 'E-E-A-T Optimized', '4000 Words', 'AI Cover Image'].map(f => (
-              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textSecondary }}>
-                <span style={{ color: C.green, fontSize: 11 }}>✓</span> {f}
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* Not logged in banner */}
-        {!user && (
+        {/* Auth Banner */}
+        {!isSignedIn && (
           <div style={{ marginBottom: 20, padding: '14px 20px', borderRadius: 12, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ color: C.textSecondary, fontSize: 14 }}>
-              Sign in to start generating SEO blogs for free.
-            </span>
+            <span style={{ color: C.textSecondary, fontSize: 14 }}>Sign in to start generating SEO blogs for free.</span>
             <button
               onClick={() => setShowAuth(true)}
               style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
@@ -223,11 +206,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* Input */}
+        {/* Input Card */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>
-            Blog Topic
-          </label>
+          <label style={{ display: 'block', fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>Blog Topic</label>
           <div style={{ display: 'flex', gap: 10 }}>
             <input
               value={topic}
@@ -242,37 +223,16 @@ export default function Home() {
               disabled={running}
               style={{ height: 48, padding: '0 26px', borderRadius: 10, border: 'none', background: running ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
             >
-              {running ? 'Generating…' : user ? 'Generate →' : 'Sign In to Generate →'}
+              {running ? 'Generating…' : isSignedIn ? 'Generate →' : 'Sign In to Generate →'}
             </button>
           </div>
-
-          {/* Content Type */}
-          <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase' }}>Content Type:</span>
-            {['informational', 'commercial'].map(type => (
-              <button
-                key={type}
-                onClick={() => setCommercialIntent(type)}
-                disabled={running}
-                style={{ padding: '6px 14px', borderRadius: 6, border: `1px solid ${commercialIntent === type ? C.purple : C.border}`, background: commercialIntent === type ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.02)', color: commercialIntent === type ? C.purpleLight : C.textSecondary, fontSize: 12, cursor: running ? 'not-allowed' : 'pointer' }}
-              >
-                {type === 'commercial' ? 'Commercial' : 'Informational'}
-              </button>
-            ))}
-          </div>
-
-          {error && (
-            <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'rgba(255,99,99,0.12)', border: '1px solid rgba(255,99,99,0.2)', color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>
-              ⚠️ {error}
-            </div>
-          )}
+          {error && <div style={{ marginTop: 14, color: '#f87171', fontSize: 13 }}>⚠️ {error}</div>}
         </div>
 
-        {/* Pipeline + Results */}
+        {/* Pipeline & Results View */}
         {(running || hasResults) && (
           <div style={{ marginBottom: 40 }}>
-
-            {/* Progress bar */}
+            {/* Progress Bar */}
             {running && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textSecondary, marginBottom: 6 }}>
@@ -285,20 +245,8 @@ export default function Home() {
               </div>
             )}
 
-            {hasResults && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontSize: 14, color: C.textSecondary }}>
-                  <strong style={{ color: '#fff' }}>{wordCount.toLocaleString()}</strong> words &nbsp;·&nbsp; {sectionsWritten}/10 sections
-                </div>
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
-                  <button onClick={downloadMd} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontSize: 13 }}>
-                    ↓ Download Markdown
-                  </button>
-                </div>
-              </div>
-            )}
-
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden' }}>
+              {/* Tab Header */}
               <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)', padding: '10px 12px' }}>
                 {tabs.map(t => (
                   <button
@@ -311,9 +259,8 @@ export default function Home() {
                 ))}
               </div>
 
+              {/* Tab Content */}
               <div style={{ padding: 20, minHeight: 260 }}>
-
-                {/* Pipeline tab */}
                 {tab === 'live' && (
                   <div style={{ display: 'grid', gap: 10 }}>
                     {PIPELINE_STEPS.map(s => {
@@ -334,12 +281,9 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Overview tab */}
                 {tab === 'overview' && (
                   <div style={{ color: C.textSecondary, lineHeight: 1.8 }}>
-                    {d.coverImageUrl && (
-                      <img src={d.coverImageUrl} alt="Cover" style={{ width: '100%', borderRadius: 12, marginBottom: 20, aspectRatio: '16/9', objectFit: 'cover' }} />
-                    )}
+                    {d.coverImageUrl && <img src={d.coverImageUrl} alt="Cover" style={{ width: '100%', borderRadius: 12, marginBottom: 20, aspectRatio: '16/9', objectFit: 'cover' }} />}
                     <div style={{ display: 'grid', gap: 12 }}>
                       {[
                         { label: 'Meta Title', value: d.metaTitle },
@@ -353,93 +297,43 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
-
-                    {d.secondaryKeywords?.length > 0 && (
-                      <div style={{ marginTop: 16, padding: '12px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
-                        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>Secondary Keywords</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                          {d.secondaryKeywords.map((k, i) => (
-                            <span key={i} style={{ padding: '4px 12px', borderRadius: 99, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: C.purpleLight, fontSize: 13 }}>{k}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {(d.aiLikelihoodPercent != null || d.plagiarismRiskPercent != null) && (
-                      <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
-                        <div style={{ fontWeight: 800, color: '#fff', marginBottom: 10, fontSize: 14 }}>Quality Signals</div>
-                        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                          {d.aiLikelihoodPercent != null && (
-                            <div>
-                              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 2 }}>AI LIKELIHOOD</div>
-                              <div style={{ fontSize: 22, fontWeight: 800, color: d.aiLikelihoodPercent > 50 ? '#f87171' : d.aiLikelihoodPercent > 25 ? '#fbbf24' : C.green }}>{d.aiLikelihoodPercent}%</div>
-                            </div>
-                          )}
-                          {d.plagiarismRiskPercent != null && (
-                            <div>
-                              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 2 }}>PLAGIARISM RISK</div>
-                              <div style={{ fontSize: 22, fontWeight: 800, color: d.plagiarismRiskPercent > 30 ? '#f87171' : C.green }}>{d.plagiarismRiskPercent}%</div>
-                            </div>
-                          )}
-                        </div>
-                        {Array.isArray(d.qualityReasons) && d.qualityReasons.length > 0 && (
-                          <ul style={{ marginTop: 10, paddingLeft: 18, color: C.textSecondary, fontSize: 13 }}>
-                            {d.qualityReasons.slice(0, 4).map((r, i) => <li key={i} style={{ marginBottom: 4 }}>{r}</li>)}
-                          </ul>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* SERP tab */}
+                {tab === 'blog' && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                      <button onClick={() => { navigator.clipboard.writeText(d.finalBlog); alert('Copied!') }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff', cursor: 'pointer', fontSize: 12 }}>Copy Raw Markdown</button>
+                    </div>
+                    <div style={{ color: '#e0e0f0', lineHeight: 1.8, fontSize: 15 }} dangerouslySetInnerHTML={{ __html: mdToHtml(d.finalBlog) }} />
+                  </div>
+                )}
+
                 {tab === 'serp' && (
                   <pre style={{ color: C.textSecondary, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
                     {JSON.stringify(d.serpData, null, 2)}
                   </pre>
                 )}
-
-                {/* Blog tab */}
-                {tab === 'blog' && (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                      <button
-                        onClick={() => { navigator.clipboard.writeText(d.finalBlog); alert('Copied!') }}
-                        style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff', cursor: 'pointer', fontSize: 12 }}
-                      >
-                        Copy Raw Markdown
-                      </button>
-                    </div>
-                    <div
-                      style={{ color: '#e0e0f0', lineHeight: 1.8, fontSize: 15 }}
-                      dangerouslySetInnerHTML={{ __html: mdToHtml(d.finalBlog) }}
-                    />
-                  </div>
-                )}
-
               </div>
             </div>
 
             {hasResults && (
-              <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ marginTop: 16 }}>
                 <button onClick={downloadMd} style={{ padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
                   ↓ Download Markdown
                 </button>
               </div>
             )}
-
           </div>
         )}
-
       </div>
 
       {showAuth && (
         <AuthModal
           onClose={() => setShowAuth(false)}
-          onSuccess={(u) => { setUser(u); setShowAuth(false) }}
+          onSuccess={() => setShowAuth(false)}
         />
       )}
-
     </div>
   )
 }
