@@ -1,9 +1,16 @@
 import { PrismaClient } from '@prisma/client'
 
-const globalForPrisma = global
+function getPrismaClient() {
+  if (typeof globalThis._prisma === 'undefined') {
+    globalThis._prisma = new PrismaClient()
+  }
+  return globalThis._prisma
+}
 
-export const prisma = globalForPrisma.prisma || new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+export const prisma = new Proxy({}, {
+  get(_, prop) {
+    return getPrismaClient()[prop]
+  }
+})
 
 export default prisma

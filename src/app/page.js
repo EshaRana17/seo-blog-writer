@@ -1,36 +1,6 @@
-﻿"use client"
-import { useState } from 'react'
-import { useUser } from "@clerk/nextjs"
-import Header from '@/components/Header'
-import AuthModal from '@/components/AuthModal'
+﻿'use client'
 
-const PIPELINE_STEPS = [
-  { id: 'keywords',  icon: '🔑', label: 'Keyword Research',      desc: 'Generating long-tail & secondary keywords' },
-  { id: 'meta',      icon: '🏷️', label: 'Meta Data',             desc: 'Title, description & permalink' },
-  { id: 'serp',      icon: '🔍', label: 'SERP Search',           desc: 'Searching Google via Firecrawl' },
-  { id: 'scraping',  icon: '🕷️', label: 'Page Scraping',         desc: 'Reading top 10 ranking pages' },
-  { id: 'semantic',  icon: '🧠', label: 'Semantic Keywords',      desc: 'LSI & entity extraction' },
-  { id: 'structure', icon: '🏗️', label: 'Blog Structure',         desc: '10-section H1/H2/H3 plan' },
-  { id: 'writing',   icon: '✍️', label: 'Writing Blog',           desc: '400 words × 10 sections' },
-  { id: 'grammar',   icon: '✅', label: 'Quality Check',          desc: 'Grammar, SEO & E-E-A-T polish' },
-  { id: 'detection', icon: '🧪', label: 'AI & Plagiarism Check',  desc: 'Estimating AI% and plagiarism risk' },
-  { id: 'image',     icon: '🖼️', label: 'Cover Image',           desc: 'AI-generated 16:9 cover' },
-]
-
-function mdToHtml(md) {
-  if (!md) return ''
-  return md
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
-    .split('\n')
-    .map(l => l.startsWith('<') || l.trim() === '' ? l : `<p>${l}</p>`)
-    .join('\n')
-}
+import { useState, useEffect } from 'react'
 
 const C = {
   bg: '#07070f',
@@ -44,295 +14,255 @@ const C = {
   textDim: 'rgba(255,255,255,0.25)',
 }
 
-export default function Home() {
-  const { isSignedIn, user, isLoaded } = useUser();
-  const [showAuth, setShowAuth] = useState(false)
-  const [topic, setTopic] = useState('')
-  const [commercialIntent, setCommercialIntent] = useState('informational')
-  const [running, setRunning] = useState(false)
-  const [tab, setTab] = useState('live')
-  const [steps, setSteps] = useState({})
-  const [stepMsg, setStepMsg] = useState({})
-  const [sections, setSections] = useState([])
-  const [d, setD] = useState({
-    primaryKeyword: '', secondaryKeywords: [], metaTitle: '',
-    metaDescription: '', permalink: '', semanticKeywords: [],
-    serpData: null, structure: [], finalBlog: '', coverImageUrl: '',
-    imagePrompt: '', imageGeneratedVia: '',
-    aiLikelihoodPercent: null, plagiarismRiskPercent: null, qualityReasons: [],
-  })
-  const [error, setError] = useState('')
+export default function Dashboard() {
+  const [user, setUser] = useState(null)
+  const [blogs, setBlogs] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  function setStep(id, status, msg) {
-    setSteps(p => ({ ...p, [id]: status }))
-    if (msg) setStepMsg(p => ({ ...p, [id]: msg }))
-  }
-
-  async function run() {
-    if (!topic.trim()) return
-    if (!isSignedIn) {
-      setShowAuth(true)
-      return
-    }
-    if (running) return
-
-    setRunning(true)
-    setError('')
-    setSteps({})
-    setStepMsg({})
-    setSections([])
-    setD({
-      primaryKeyword: '', secondaryKeywords: [], metaTitle: '',
-      metaDescription: '', permalink: '', semanticKeywords: [],
-      serpData: null, structure: [], finalBlog: '', coverImageUrl: '',
-      imagePrompt: '', imageGeneratedVia: '',
-      aiLikelihoodPercent: null, plagiarismRiskPercent: null, qualityReasons: [],
-    })
-    setTab('live')
-
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, commercialIntent }),
-      })
-
-      if (res.status === 401) {
-        setShowAuth(true)
-        setRunning(false)
-        return
-      }
-
-      if (!res.ok) {
-        setError('Server error. Please try again.')
-        setRunning(false)
-        return
-      }
-
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      let buf = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += dec.decode(value, { stream: true })
-        const lines = buf.split('\n')
-        buf = lines.pop()
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const { event, data: p } = JSON.parse(line.slice(6))
-            if (event === 'step') setStep(p.id, p.status, p.msg)
-            else if (event === 'data') setD(prev => ({ ...prev, ...p }))
-            else if (event === 'section_start') {
-              setSections(prev => {
-                const n = [...prev]
-                n[p.index] = { h2: p.h2, content: null, writing: true }
-                return n
-              })
-            }
-            else if (event === 'section_done') {
-              setSections(prev => {
-                const n = [...prev]
-                n[p.index] = { ...n[p.index], content: p.content, writing: false }
-                return n
-              })
-            }
-            else if (event === 'error') setError(p.message)
-            else if (event === 'done') setTab('overview')
-          } catch {}
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(data => {
+        if (data.user) {
+          setUser(data.user)
+          fetchBlogs()
+        } else {
+          window.location.href = '/'
         }
+      })
+      .catch(() => { window.location.href = '/' })
+  }, [])
+
+  const fetchBlogs = async () => {
+    try {
+      const res = await fetch('/api/blogs')
+      if (res.ok) {
+        const data = await res.json()
+        setBlogs(data)
       }
-    } catch (e) {
-      setError(e.message || 'Something went wrong.')
-    }
-    setRunning(false)
+    } catch {}
+    setLoading(false)
   }
 
-  const doneCount = Object.values(steps).filter(s => s === 'done').length
-  const progress = Math.round((doneCount / PIPELINE_STEPS.length) * 100)
-  const wordCount = d.finalBlog ? d.finalBlog.split(/\s+/).filter(Boolean).length : 0
-  const sectionsWritten = sections.filter(s => !s?.writing && s?.content).length
-
-  function downloadMd() {
-    const fm = `---\ntitle: "${d.metaTitle}"\ndescription: "${d.metaDescription}"\nprimary_keyword: "${d.primaryKeyword}"\npermalink: "/${d.permalink}"\nsecondary_keywords: [${d.secondaryKeywords.map(k => `"${k}"`).join(', ')}]\n---\n\n`
+  const downloadMd = (blog) => {
+    const fm = `---\ntitle: "${blog.metaTitle}"\ndescription: "${blog.metaDescription}"\nprimary_keyword: "${blog.primaryKeyword}"\npermalink: "/${blog.permalink}"\n---\n\n`
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([fm + d.finalBlog], { type: 'text/markdown' }))
-    a.download = (d.permalink || 'blog') + '.md'
+    a.href = URL.createObjectURL(new Blob([fm + blog.finalBlog], { type: 'text/markdown' }))
+    a.download = (blog.permalink || 'blog') + '.md'
     a.click()
   }
 
-  const hasResults = !!d.finalBlog
-  const tabs = hasResults
-    ? [
-        { id: 'overview', label: 'Overview' },
-        { id: 'blog', label: `Blog (${wordCount.toLocaleString()}w)` },
-        { id: 'serp', label: 'SERP Data' },
-        { id: 'live', label: 'Pipeline' },
-      ]
-    : [{ id: 'live', label: 'Pipeline' }]
+  const deleteBlog = async (blogId) => {
+    if (!confirm('Delete this blog?')) return
+    await fetch(`/api/blogs?id=${blogId}`, { method: 'DELETE' })
+    setBlogs(prev => prev.filter(b => b.id !== blogId))
+  }
 
-  if (!isLoaded) return <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Loading session...</div>
+  const publishToWordPress = async (blogId, wpUrl, wpUsername, wpPassword) => {
+    const res = await fetch('/api/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blogId, wpUrl, wpUsername, wpPassword }),
+    })
+    if (res.ok) {
+      alert('Published to WordPress!')
+      fetchBlogs()
+    } else {
+      alert('Failed to publish. Check your credentials.')
+    }
+  }
+
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textSecondary }}>
+      Loading your blogs...
+    </div>
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingBottom: 80 }}>
-      <Header user={user} />
-
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '40px 20px' }}>
-        {/* Hero */}
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
-          <h1 style={{ fontSize: 'clamp(30px,5vw,54px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-1.5px', marginBottom: 18, color: C.textPrimary }}>
-            Real SERP Research.<br />
-            <span style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              4000‑Word Blog.
-            </span>
-          </h1>
-          <p style={{ color: C.textSecondary, fontSize: 16, maxWidth: 500, margin: '0 auto', lineHeight: 1.7 }}>
-            Firecrawl scrapes Google's top results. Grok writes a fully SEO-optimized blog with real SERP research and competitor analysis.
-          </p>
+      {/* Header */}
+      <div style={{ background: 'rgba(7,7,15,0.94)', backdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(255,255,255,0.08)', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg,#7c3aed,#a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✍</div>
+            <span style={{ fontWeight: 900, fontSize: 18, color: C.textPrimary }}><span style={{ color: C.purple }}>SEO</span> Blog Writer</span>
+          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {user && (
+              <span style={{ fontSize: 13, color: C.textSecondary }}>
+                {user.email} · <span style={{ color: C.purpleLight }}>{user.plan}</span>
+              </span>
+            )}
+            <a href="/" style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.1)', color: C.purpleLight, textDecoration: 'none', fontSize: 13 }}>
+              + New Blog
+            </a>
+          </div>
         </div>
+      </div>
 
-        {/* Auth Banner */}
-        {!isSignedIn && (
-          <div style={{ marginBottom: 20, padding: '14px 20px', borderRadius: 12, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-            <span style={{ color: C.textSecondary, fontSize: 14 }}>Sign in to start generating SEO blogs for free.</span>
-            <button
-              onClick={() => setShowAuth(true)}
-              style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-            >
-              Sign Up Free →
-            </button>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 20px' }}>
+        {/* Stats */}
+        {user && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 40 }}>
+            {[
+              { label: 'Total Blogs', value: blogs.length },
+              { label: 'Plan', value: user.plan?.toUpperCase() },
+              { label: 'Blogs Used', value: `${user.blogsUsed || 0} / ${user.plan === 'free' ? '2' : '∞'}` },
+              { label: 'Published', value: blogs.filter(b => b.wordpressPublished).length },
+            ].map(stat => (
+              <div key={stat.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
+                <div style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 6 }}>{stat.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.textPrimary }}>{stat.value}</div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Input Card */}
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 }}>Blog Topic</label>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <input
-              value={topic}
-              onChange={e => setTopic(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && run()}
-              placeholder="e.g. Best CRM software for small businesses in 2025"
-              disabled={running}
-              style={{ flex: 1, height: 48, padding: '0 16px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.textPrimary, fontSize: 15, outline: 'none' }}
-            />
-            <button
-              onClick={run}
-              disabled={running}
-              style={{ height: 48, padding: '0 26px', borderRadius: 10, border: 'none', background: running ? 'rgba(255,255,255,0.07)' : 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-            >
-              {running ? 'Generating…' : isSignedIn ? 'Generate →' : 'Sign In to Generate →'}
-            </button>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.textPrimary, marginBottom: 24 }}>Your Blogs</h1>
+
+        {blogs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 16 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>✍️</div>
+            <p style={{ color: C.textSecondary, fontSize: 16, marginBottom: 20 }}>No blogs yet.</p>
+            <a href="/" style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 700 }}>
+              Create Your First Blog →
+            </a>
           </div>
-          {error && <div style={{ marginTop: 14, color: '#f87171', fontSize: 13 }}>⚠️ {error}</div>}
-        </div>
-
-        {/* Pipeline & Results View */}
-        {(running || hasResults) && (
-          <div style={{ marginBottom: 40 }}>
-            {/* Progress Bar */}
-            {running && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textSecondary, marginBottom: 6 }}>
-                  <span>Pipeline progress</span>
-                  <span>{progress}%</span>
-                </div>
-                <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 99 }}>
-                  <div style={{ height: 4, borderRadius: 99, background: 'linear-gradient(90deg,#7c3aed,#a855f7)', width: `${progress}%`, transition: 'width 0.5s ease' }} />
-                </div>
-              </div>
-            )}
-
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden' }}>
-              {/* Tab Header */}
-              <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)', padding: '10px 12px' }}>
-                {tabs.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? '#fff' : C.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: tab === t.id ? 700 : 500 }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tab Content */}
-              <div style={{ padding: 20, minHeight: 260 }}>
-                {tab === 'live' && (
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    {PIPELINE_STEPS.map(s => {
-                      const status = steps[s.id]
-                      return (
-                        <div key={s.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', borderRadius: 10, background: status === 'active' ? 'rgba(139,92,246,0.07)' : 'transparent', border: `1px solid ${status === 'active' ? 'rgba(139,92,246,0.2)' : 'transparent'}`, transition: 'all 0.3s' }}>
-                          <div style={{ fontSize: 20, marginTop: 1 }}>{s.icon}</div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, color: status === 'done' ? C.green : status === 'active' ? C.purpleLight : '#fff', fontSize: 14 }}>{s.label}</div>
-                            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>{stepMsg[s.id] || s.desc}</div>
-                          </div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: status === 'done' ? C.green : status === 'error' ? '#f87171' : status === 'active' ? C.purpleLight : C.textDim }}>
-                            {status === 'done' ? '✓' : status === 'error' ? '✕' : status === 'active' ? '⟳' : '·'}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {tab === 'overview' && (
-                  <div style={{ color: C.textSecondary, lineHeight: 1.8 }}>
-                    {d.coverImageUrl && <img src={d.coverImageUrl} alt="Cover" style={{ width: '100%', borderRadius: 12, marginBottom: 20, aspectRatio: '16/9', objectFit: 'cover' }} />}
-                    <div style={{ display: 'grid', gap: 12 }}>
-                      {[
-                        { label: 'Meta Title', value: d.metaTitle },
-                        { label: 'Meta Description', value: d.metaDescription },
-                        { label: 'Primary Keyword', value: d.primaryKeyword },
-                        { label: 'Permalink', value: d.permalink ? `/${d.permalink}` : '' },
-                      ].map(item => item.value && (
-                        <div key={item.label} style={{ padding: '12px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>
-                          <div style={{ fontSize: 11, color: C.textDim, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</div>
-                          <div style={{ color: '#fff', fontSize: 14 }}>{item.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {tab === 'blog' && (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                      <button onClick={() => { navigator.clipboard.writeText(d.finalBlog); alert('Copied!') }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff', cursor: 'pointer', fontSize: 12 }}>Copy Raw Markdown</button>
-                    </div>
-                    <div style={{ color: '#e0e0f0', lineHeight: 1.8, fontSize: 15 }} dangerouslySetInnerHTML={{ __html: mdToHtml(d.finalBlog) }} />
-                  </div>
-                )}
-
-                {tab === 'serp' && (
-                  <pre style={{ color: C.textSecondary, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
-                    {JSON.stringify(d.serpData, null, 2)}
-                  </pre>
-                )}
-              </div>
-            </div>
-
-            {hasResults && (
-              <div style={{ marginTop: 16 }}>
-                <button onClick={downloadMd} style={{ padding: '10px 20px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-                  ↓ Download Markdown
-                </button>
-              </div>
-            )}
+        ) : (
+          <div style={{ display: 'grid', gap: 16 }}>
+            {blogs.map(blog => (
+              <BlogCard
+                key={blog.id}
+                blog={blog}
+                onDownload={downloadMd}
+                onDelete={deleteBlog}
+                onPublish={publishToWordPress}
+              />
+            ))}
           </div>
         )}
       </div>
+    </div>
+  )
+}
 
-      {showAuth && (
-        <AuthModal
-          onClose={() => setShowAuth(false)}
-          onSuccess={() => setShowAuth(false)}
-        />
+function BlogCard({ blog, onDownload, onDelete, onPublish }) {
+  const [expanded, setExpanded] = useState(false)
+  const wordCount = blog.finalBlog ? blog.finalBlog.split(/\s+/).filter(Boolean).length : 0
+
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ color: '#f0f0ff', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>{blog.metaTitle}</h2>
+          <p style={{ color: '#9090a8', fontSize: 13, marginBottom: 10 }}>{blog.topic}</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}>
+              {blog.primaryKeyword}
+            </span>
+            <span style={{ fontSize: 11, color: '#9090a8' }}>{wordCount.toLocaleString()} words</span>
+            <span style={{ fontSize: 11, color: '#9090a8' }}>{new Date(blog.createdAt).toLocaleDateString()}</span>
+            {blog.aiLikelihood != null && (
+              <span style={{ fontSize: 11, color: blog.aiLikelihood > 50 ? '#f87171' : blog.aiLikelihood > 25 ? '#fbbf24' : '#22c55e' }}>
+                AI: {blog.aiLikelihood}%
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.3)', background: 'transparent', color: '#a78bfa', cursor: 'pointer', fontSize: 12 }}
+          >
+            {expanded ? 'Hide' : 'View'}
+          </button>
+          <button
+            onClick={() => onDownload(blog)}
+            style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.3)', background: 'transparent', color: '#22c55e', cursor: 'pointer', fontSize: 12 }}
+          >
+            ↓ MD
+          </button>
+          <button
+            onClick={() => onDelete(blog.id)}
+            style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(255,80,80,0.2)', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: 12 }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 20 }}>
+          <div style={{ maxHeight: 400, overflowY: 'auto', background: '#0d0d1a', borderRadius: 10, padding: 16, fontSize: 13, color: '#d0d0e8', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            {blog.finalBlog}
+          </div>
+
+          {!blog.wordpressPublished && (
+            <WordPressForm blog={blog} onPublish={onPublish} />
+          )}
+          {blog.wordpressPublished && (
+            <div style={{ marginTop: 12, color: '#22c55e', fontSize: 13 }}>✓ Published to WordPress</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WordPressForm({ blog, onPublish }) {
+  const [show, setShow] = useState(false)
+  const [wpUrl, setWpUrl] = useState('')
+  const [wpUsername, setWpUsername] = useState('')
+  const [wpPassword, setWpPassword] = useState('')
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onPublish(blog.id, wpUrl, wpUsername, wpPassword)
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <button
+        onClick={() => setShow(!show)}
+        style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(245,158,11,0.3)', background: 'transparent', color: '#f59e0b', cursor: 'pointer', fontSize: 12 }}
+      >
+        {show ? 'Cancel' : '⬆ Publish to WordPress'}
+      </button>
+
+      {show && (
+        <form onSubmit={handleSubmit} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 400 }}>
+          <input
+            type="url"
+            placeholder="WordPress Site URL (https://yoursite.com)"
+            value={wpUrl}
+            onChange={e => setWpUrl(e.target.value)}
+            required
+            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#f0f0ff', fontSize: 13 }}
+          />
+          <input
+            type="text"
+            placeholder="WordPress Username"
+            value={wpUsername}
+            onChange={e => setWpUsername(e.target.value)}
+            required
+            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#f0f0ff', fontSize: 13 }}
+          />
+          <input
+            type="password"
+            placeholder="Application Password"
+            value={wpPassword}
+            onChange={e => setWpPassword(e.target.value)}
+            required
+            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#f0f0ff', fontSize: 13 }}
+          />
+          <button
+            type="submit"
+            style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+          >
+            Publish Now
+          </button>
+        </form>
       )}
     </div>
   )

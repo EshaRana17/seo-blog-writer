@@ -1,4 +1,2 @@
 'use client'
-export function Providers({ children }) {
-  return <>{children}</>
-}
+export function Providers({ children }) { return children }

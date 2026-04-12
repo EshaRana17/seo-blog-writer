@@ -1,4 +1,6 @@
-'use client'
+const fs = require('fs')
+
+const dashboard = `'use client'
 import { useState, useEffect } from 'react'
 
 export default function Dashboard() {
@@ -22,7 +24,7 @@ export default function Dashboard() {
   }
 
   function downloadMd(blog) {
-    const content = '---\ntitle: "' + blog.metaTitle + '"\ndescription: "' + blog.metaDescription + '"\nprimary_keyword: "' + blog.primaryKeyword + '"\n---\n\n' + blog.finalBlog
+    const content = '---\\ntitle: "' + blog.metaTitle + '"\\ndescription: "' + blog.metaDescription + '"\\nprimary_keyword: "' + blog.primaryKeyword + '"\\n---\\n\\n' + blog.finalBlog
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([content], { type: 'text/markdown' }))
     a.download = (blog.permalink || 'blog') + '.md'
@@ -99,7 +101,7 @@ function BlogCard({ blog, onDownload, onDelete }) {
   const [wpUrl, setWpUrl] = useState('')
   const [wpUser, setWpUser] = useState('')
   const [wpPass, setWpPass] = useState('')
-  const wordCount = blog.finalBlog ? blog.finalBlog.split(/\s+/).filter(Boolean).length : 0
+  const wordCount = blog.finalBlog ? blog.finalBlog.split(/\\s+/).filter(Boolean).length : 0
 
   async function publish() {
     const res = await fetch('/api/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blogId: blog.id, wpUrl, wpUsername: wpUser, wpPassword: wpPass }) })
@@ -150,3 +152,11 @@ function BlogCard({ blog, onDownload, onDelete }) {
     </div>
   )
 }
+`
+
+fs.writeFileSync('src/app/dashboard/page.js', dashboard, 'utf8')
+const check = fs.readFileSync('src/app/dashboard/page.js', 'utf8')
+console.log('Written: ' + check.length + ' bytes')
+console.log('Has useUser:', check.includes('useUser'))
+console.log('Has clerk:', check.includes('clerk'))
+console.log('\nNow run: npm run build')
