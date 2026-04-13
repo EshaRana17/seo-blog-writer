@@ -1,4 +1,47 @@
-'use client'
+const fs = require('fs')
+
+// Fix 1: next.config.js - fix COOP for Google popup
+fs.writeFileSync('next.config.js', `/** @type {import('next').NextConfig} */
+const nextConfig = {
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+          { key: 'Cross-Origin-Embedder-Policy', value: 'unsafe-none' },
+        ],
+      },
+    ]
+  },
+}
+module.exports = nextConfig
+`, 'utf8')
+console.log('OK next.config.js')
+
+// Fix 2: layout.js - check if it's rendering Header causing double header
+const layoutContent = `import './globals.css'
+
+export const metadata = {
+  title: 'SEO Blog Writer - AI-Powered Content in Minutes',
+  description: 'Generate 4000-word SEO-optimized blogs with real SERP research and competitor analysis.',
+}
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body style={{ margin: 0, padding: 0, background: '#07070f', fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' }}>
+        {children}
+      </body>
+    </html>
+  )
+}
+`
+fs.writeFileSync('src/app/layout.js', layoutContent, 'utf8')
+console.log('OK layout.js - removed any duplicate header')
+
+// Fix 3: Full polished page.js
+const homePage = `'use client'
 import { useState, useEffect } from 'react'
 import Header from '@/components/Header'
 import AuthModal from '@/components/AuthModal'
@@ -22,10 +65,10 @@ function mdToHtml(md) {
     .replace(/^### (.+)$/gm, '<h3 style="color:#a78bfa;font-size:16px;margin:20px 0 8px">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 style="color:#f0f0ff;font-size:20px;margin:28px 0 10px">$1</h2>')
     .replace(/^# (.+)$/gm, '<h1 style="color:#f0f0ff;font-size:26px;margin:0 0 16px">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
     .replace(/^- (.+)$/gm, '<li style="margin:4px 0">$1</li>')
-    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, m => '<ul style="padding-left:20px;margin:12px 0">' + m + '</ul>')
-    .split('\n').map(l => l.startsWith('<') || !l.trim() ? l : '<p style="margin:0 0 14px;line-height:1.8">' + l + '</p>').join('\n')
+    .replace(/(<li[^>]*>.*<\\/li>\\n?)+/g, m => '<ul style="padding-left:20px;margin:12px 0">' + m + '</ul>')
+    .split('\\n').map(l => l.startsWith('<') || !l.trim() ? l : '<p style="margin:0 0 14px;line-height:1.8">' + l + '</p>').join('\\n')
 }
 
 export default function Home() {
@@ -65,7 +108,7 @@ export default function Home() {
       while (true) {
         const { done, value } = await reader.read(); if (done) break
         buf += dec.decode(value, { stream: true })
-        const lines = buf.split('\n'); buf = lines.pop()
+        const lines = buf.split('\\n'); buf = lines.pop()
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           try {
@@ -85,11 +128,11 @@ export default function Home() {
 
   const done = Object.values(steps).filter(s => s === 'done').length
   const progress = Math.round((done / STEPS.length) * 100)
-  const wordCount = result.finalBlog ? result.finalBlog.split(/\s+/).filter(Boolean).length : 0
+  const wordCount = result.finalBlog ? result.finalBlog.split(/\\s+/).filter(Boolean).length : 0
   const hasResults = !!result.finalBlog
 
   function downloadMd() {
-    const content = '---\ntitle: "' + result.metaTitle + '"\ndescription: "' + result.metaDescription + '"\nprimary_keyword: "' + result.primaryKeyword + '"\npermalink: "/' + result.permalink + '"\n---\n\n' + result.finalBlog
+    const content = '---\\ntitle: "' + result.metaTitle + '"\\ndescription: "' + result.metaDescription + '"\\nprimary_keyword: "' + result.primaryKeyword + '"\\npermalink: "/' + result.permalink + '"\\n---\\n\\n' + result.finalBlog
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: 'text/markdown' })); a.download = (result.permalink || 'blog') + '.md'; a.click()
   }
 
@@ -334,3 +377,9 @@ export default function Home() {
     </div>
   )
 }
+`
+
+fs.writeFileSync('src/app/page.js', homePage, 'utf8')
+console.log('OK src/app/page.js - polished UI, single header')
+
+console.log('\nAll done! Run: npm run dev')

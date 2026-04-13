@@ -29,7 +29,6 @@ async function fcScrape(url) {
 export async function POST(req) {
   const session = await getSession()
   if (!session) return new Response('Unauthorized', { status: 401 })
-  const uid = session.userId
   const body = await req.json()
   const topic = body.topic
   const intent = body.commercialIntent || 'informational'
@@ -38,17 +37,17 @@ export async function POST(req) {
     async start(ctrl) {
       function send(event, data) { ctrl.enqueue(enc.encode('data: ' + JSON.stringify({ event, data }) + '\n\n')) }
       try {
-        const user = await prisma.user.findUnique({ where: { id: uid } })
-        if (!user) { send('error', { message: 'User not found' }); ctrl.close(); return }
+        let user = await prisma.user.findUnique({ where: { firebaseId: session.userId } })
+        if (!user) user = await prisma.user.create({ data: { firebaseId: session.userId, email: session.email || '', name: session.name || '' } })
         if (user.plan === 'free' && user.blogsUsed >= 2) { send('error', { message: 'Free plan limit reached. Upgrade to Pro.' }); ctrl.close(); return }
         send('step', { id: 'keywords', status: 'active', msg: 'Researching keywords...' })
         const topicSerp = await fcSearch(topic, 6)
         const serpBrief = topicSerp.slice(0, 6).map((r, i) => (i+1) + '. ' + ((r.metadata && r.metadata.title) || 'Untitled') + '\n' + (r.markdown || r.content || '').replace(/\s+/g, ' ').substring(0, 200)).join('\n\n')
-        const kw = safeJson(await ask('You are an SEO expert. Respond ONLY with valid JSON, no markdown.', 'Topic: ' + topic + '\nIntent: ' + intent + '\nSERP:\n' + serpBrief + '\nReturn: {"primaryKeyword":"4-6 word keyword","secondaryKeywords":["kw1","kw2","kw3","kw4"]}', 300))
+        const kw = safeJson(await ask('SEO expert. Respond ONLY valid JSON, no markdown.', 'Topic: ' + topic + '\nIntent: ' + intent + '\nSERP:\n' + serpBrief + '\nReturn: {"primaryKeyword":"4-6 word keyword","secondaryKeywords":["kw1","kw2","kw3","kw4"]}', 300))
         send('data', { primaryKeyword: kw.primaryKeyword, secondaryKeywords: kw.secondaryKeywords })
         send('step', { id: 'keywords', status: 'done' })
         send('step', { id: 'meta', status: 'active', msg: 'Writing meta data...' })
-        const meta = safeJson(await ask('You are an SEO copywriter. Respond ONLY with valid JSON, no markdown.', 'Keyword: ' + kw.primaryKeyword + '\nTopic: ' + topic + '\nReturn: {"metaTitle":"50-60 chars","metaDescription":"140-155 chars","permalink":"3-5-word-slug"}', 400))
+        const meta = safeJson(await ask('SEO copywriter. Respond ONLY valid JSON, no markdown.', 'Keyword: ' + kw.primaryKeyword + '\nTopic: ' + topic + '\nReturn: {"metaTitle":"50-60 chars","metaDescription":"140-155 chars","permalink":"3-5-word-slug"}', 400))
         send('data', { metaTitle: meta.metaTitle, metaDescription: meta.metaDescription, permalink: meta.permalink })
         send('step', { id: 'meta', status: 'done' })
         send('step', { id: 'serp', status: 'active', msg: 'Searching SERP...' })
@@ -70,12 +69,12 @@ export async function POST(req) {
         send('step', { id: 'scraping', status: 'done' })
         send('step', { id: 'semantic', status: 'active', msg: 'Extracting semantic keywords...' })
         const combined = pages.map(p => p.content).join(' ').substring(0, 6000)
-        const sem = safeJson(await ask('You are an NLP expert. Respond ONLY with valid JSON, no markdown.', 'Primary keyword: ' + kw.primaryKeyword + '\nContent:\n' + combined + '\nReturn: {"semanticKeywords":["kw1","kw2"]}', 600))
+        const sem = safeJson(await ask('NLP expert. Respond ONLY valid JSON, no markdown.', 'Keyword: ' + kw.primaryKeyword + '\nContent:\n' + combined + '\nReturn: {"semanticKeywords":["kw1","kw2"]}', 600))
         send('data', { semanticKeywords: sem.semanticKeywords })
         send('step', { id: 'semantic', status: 'done' })
         send('step', { id: 'structure', status: 'active', msg: 'Planning blog structure...' })
         const angles = pages.slice(0, 5).map(p => 'Rank ' + p.rank + ': ' + p.content.substring(0, 250)).join('\n\n')
-        const struct = safeJson(await ask('You are an SEO content strategist. Respond ONLY with valid JSON, no markdown.', 'Keyword: ' + kw.primaryKeyword + '\nTitle: ' + meta.metaTitle + '\nIntent: ' + intent + '\nCompetitors:\n' + angles + '\n10 sections: 1=intro,2-7=body,8=conclusion,9=cta,10=faq\nReturn: {"sections":[{"num":1,"h2":"...","h3s":["..."],"angle":"...","type":"intro"}]}', 1800))
+        const struct = safeJson(await ask('SEO strategist. Respond ONLY valid JSON, no markdown.', 'Keyword: ' + kw.primaryKeyword + '\nTitle: ' + meta.metaTitle + '\nIntent: ' + intent + '\nCompetitors:\n' + angles + '\n10 sections: 1=intro,2-7=body,8=conclusion,9=cta,10=faq\nReturn: {"sections":[{"num":1,"h2":"...","h3s":["..."],"angle":"...","type":"intro"}]}', 1800))
         send('data', { structure: struct.sections })
         send('step', { id: 'structure', status: 'done' })
         send('step', { id: 'writing', status: 'active', msg: 'Writing blog sections...' })
@@ -88,10 +87,10 @@ export async function POST(req) {
           const h3s = (sec.h3s || []).map(h => '### ' + h).join('\n')
           const isFaq = String(sec.type).toLowerCase().indexOf('faq') > -1
           const isCta = String(sec.type).toLowerCase().indexOf('cta') > -1
-          let prompt = 'Write EXACTLY 400 words.\nTitle: ' + meta.metaTitle + '\nKeyword: ' + kw.primaryKeyword + '\nRef content: ' + refContent.substring(0, 1000) + '\nSECTION:\n## ' + sec.h2 + '\n' + h3s + '\nAngle: ' + (sec.angle || 'practical') + '\nRules: 400 words, include headings, first person I, short paragraphs, no filler'
+          let prompt = 'Write EXACTLY 400 words.\nTitle: ' + meta.metaTitle + '\nKeyword: ' + kw.primaryKeyword + '\nRef: ' + refContent.substring(0, 1000) + '\nSECTION:\n## ' + sec.h2 + '\n' + h3s + '\nAngle: ' + (sec.angle || 'practical') + '\nRules: 400 words, include headings, first person I, short paragraphs'
           if (isFaq) prompt += '\nFAQ: 6 questions as ### headings, 50-70 words each'
           if (isCta) prompt += '\nCTA: persuasive, personal, clear action'
-          const secContent = await ask('You are a world-class SEO writer. Simple English, first person I, E-E-A-T.', prompt, 950)
+          const secContent = await ask('World-class SEO writer. Simple English, first person I, E-E-A-T.', prompt, 950)
           allSections.push(secContent)
           send('section_done', { index: j, content: secContent })
         }
@@ -101,9 +100,8 @@ export async function POST(req) {
         send('data', { finalBlog: polished })
         send('step', { id: 'grammar', status: 'done' })
         send('step', { id: 'detection', status: 'active', msg: 'Checking AI likelihood...' })
-        const detect = safeJson(await ask('Content auditor. Respond ONLY with valid JSON, no markdown.', 'Return: {"aiLikelihoodPercent":0,"plagiarismRiskPercent":0,"reasons":[],"riskySentences":[]}\nBLOG:\n' + polished.substring(0, 8000), 600))
+        const detect = safeJson(await ask('Content auditor. Respond ONLY valid JSON, no markdown.', 'Return: {"aiLikelihoodPercent":0,"plagiarismRiskPercent":0,"reasons":[],"riskySentences":[]}\nBLOG:\n' + polished.substring(0, 8000), 600))
         send('data', { aiLikelihoodPercent: detect.aiLikelihoodPercent, plagiarismRiskPercent: detect.plagiarismRiskPercent, qualityReasons: detect.reasons })
-        let finalBlog = polished
         send('step', { id: 'detection', status: 'done' })
         send('step', { id: 'image', status: 'active', msg: 'Generating cover image...' })
         const imgRaw = await ask('Creative director. One image prompt only, no quotes, 50-100 words.', 'Cover 16:9 for: ' + meta.metaTitle + '. Modern, professional, no text overlays.', 200)
@@ -111,7 +109,7 @@ export async function POST(req) {
         const coverImageUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(imgPrompt) + '?width=1200&height=675&nologo=true'
         send('data', { coverImageUrl, imagePrompt: imgPrompt })
         send('step', { id: 'image', status: 'done' })
-        await prisma.blog.create({ data: { userId: user.id, topic, primaryKeyword: kw.primaryKeyword, secondaryKeywords: kw.secondaryKeywords, metaTitle: meta.metaTitle, metaDescription: meta.metaDescription, permalink: meta.permalink, semanticKeywords: sem.semanticKeywords || [], serpData: { results: serpSummary }, structure: struct.sections, finalBlog, coverImageUrl, imagePrompt: imgPrompt, aiLikelihood: detect.aiLikelihoodPercent, plagiarismRisk: detect.plagiarismRiskPercent, qualityReasons: detect.reasons || [] } })
+        await prisma.blog.create({ data: { userId: user.id, topic, primaryKeyword: kw.primaryKeyword, secondaryKeywords: kw.secondaryKeywords, metaTitle: meta.metaTitle, metaDescription: meta.metaDescription, permalink: meta.permalink, semanticKeywords: sem.semanticKeywords || [], serpData: { results: serpSummary }, structure: struct.sections, finalBlog: polished, coverImageUrl, imagePrompt: imgPrompt, aiLikelihood: detect.aiLikelihoodPercent, plagiarismRisk: detect.plagiarismRiskPercent, qualityReasons: detect.reasons || [] } })
         await prisma.user.update({ where: { id: user.id }, data: { blogsUsed: { increment: 1 } } })
         send('done', { success: true })
       } catch (err) {
