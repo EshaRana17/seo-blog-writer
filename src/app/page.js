@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { cookies } from 'next/headers'
 
 const C = {
   bg: '#07070f',
