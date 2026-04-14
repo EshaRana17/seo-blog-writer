@@ -1,27 +1,22 @@
-export default function Dashboard() {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+"use client"; // This MUST be the very first line
 
-useEffect(() => {
+import { useState, useEffect } from 'react';
+
+export default function Dashboard() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
     fetch('/api/auth/me')
       .then(r => r.json())
       .then(data => {
         if (data.user) {
-          setUser(data.user)
-          // Move fetchBlogs here so it only runs if user exists
-          fetch('/api/blogs')
-            .then(res => res.json())
-            .then(blogsData => setBlogs(blogsData))
-            .finally(() => setLoading(false))
-        } else {
-          // If no user, send them to the landing page
-          window.location.href = '/'
+          setUser(data.user);
         }
+        setLoading(false); // Make sure to stop loading
       })
-      .catch(() => {
-        window.location.href = '/'
-      })
-  }, [])
+      .catch(() => setLoading(false));
+  }, []);
 
   if (loading) return <div className="min-h-screen bg-[#07070f] flex items-center justify-center text-white">Verifying Session...</div>
 
