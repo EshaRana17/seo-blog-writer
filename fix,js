@@ -1,40 +1,34 @@
 const fs = require('fs')
 
-fs.mkdirSync('src/app/api/auth/session', { recursive: true })
-
 fs.writeFileSync('src/app/api/auth/session/route.js',
 `import { PrismaClient } from '@prisma/client'
-import admin from 'firebase-admin'
 
 const prisma = new PrismaClient()
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\\\n/g, '\\n'),
-    }),
-  })
+async function verifyFirebaseToken(token) {
+  const parts = token.split('.')
+  if (parts.length !== 3) throw new Error('Invalid token')
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+  if (payload.exp && payload.exp < Date.now() / 1000) throw new Error('Token expired')
+  return payload
 }
 
 export async function POST(req) {
   try {
     const { token } = await req.json()
-    const decoded = await admin.auth().verifyIdToken(token)
+    const payload = await verifyFirebaseToken(token)
+    const uid = payload.sub || payload.user_id
+    const email = payload.email || ''
+    const name = payload.name || ''
 
-    let user = await prisma.user.findUnique({ where: { firebaseId: decoded.uid } })
+    let user = await prisma.user.findUnique({ where: { firebaseId: uid } })
     if (!user) {
       user = await prisma.user.create({
-        data: {
-          firebaseId: decoded.uid,
-          email: decoded.email || '',
-          name: decoded.name || '',
-        }
+        data: { firebaseId: uid, email, name }
       })
     }
 
-    const res = Response.json({ success: true, user })
+    const res = Response.json({ success: true, user: { id: user.id, email: user.email, name: user.name, plan: user.plan, blogsUsed: user.blogsUsed } })
     res.headers.set('Set-Cookie', \`auth_token=\${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800\`)
     return res
   } catch (err) {
@@ -45,20 +39,9 @@ export async function POST(req) {
 
 fs.writeFileSync('src/app/api/auth/me/route.js',
 `import { PrismaClient } from '@prisma/client'
-import admin from 'firebase-admin'
 import { cookies } from 'next/headers'
 
 const prisma = new PrismaClient()
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\\\n/g, '\\n'),
-    }),
-  })
-}
 
 export async function GET() {
   try {
@@ -66,9 +49,14 @@ export async function GET() {
     const token = cookieStore.get('auth_token')?.value
     if (!token) return Response.json({ user: null })
 
-    const decoded = await admin.auth().verifyIdToken(token)
+    const parts = token.split('.')
+    if (parts.length !== 3) return Response.json({ user: null })
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+    if (payload.exp && payload.exp < Date.now() / 1000) return Response.json({ user: null })
+    const uid = payload.sub || payload.user_id
+
     const user = await prisma.user.findUnique({
-      where: { firebaseId: decoded.uid },
+      where: { firebaseId: uid },
       select: { id: true, email: true, name: true, plan: true, blogsUsed: true }
     })
     return Response.json({ user })
@@ -77,11 +65,35 @@ export async function GET() {
   }
 }`)
 
-fs.writeFileSync('src/app/api/auth/logout/route.js',
-`export async function POST() {
-  const res = Response.json({ success: true })
-  res.headers.set('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Max-Age=0')
-  return res
+fs.writeFileSync('src/lib/auth.js',
+`import { cookies } from 'next/headers'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+export async function getSession() {
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get('auth_token')?.value
+    if (!token) return null
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+    if (payload.exp && payload.exp < Date.now() / 1000) return null
+    const uid = payload.sub || payload.user_id
+    const user = await prisma.user.findUnique({
+      where: { firebaseId: uid },
+      select: { id: true }
+    })
+    if (!user) return null
+    return { userId: user.id }
+  } catch {
+    return null
+  }
 }`)
+
+fs.writeFileSync('middleware.js',
+`export default function middleware() {}
+export const config = { matcher: [] }`)
 
 console.log('Done!')
