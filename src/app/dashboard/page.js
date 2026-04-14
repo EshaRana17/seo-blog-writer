@@ -1,33 +1,42 @@
-"use client"; // This MUST be the very first line
+"use client"; 
 
 import { useState, useEffect } from 'react';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
+  const [blogs, setBlogs] = useState([]); // <--- ADD THIS LINE
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Fetch User
     fetch('/api/auth/me')
       .then(r => r.json())
       .then(data => {
         if (data.user) {
           setUser(data.user);
+          fetchBlogs(); // <--- 2. Fetch blogs only after we have a user
+        } else {
+          setLoading(false);
         }
-        setLoading(false); // Make sure to stop loading
       })
       .catch(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="min-h-screen bg-[#07070f] flex items-center justify-center text-white">Verifying Session...</div>
-
-
+  // Move this function ABOVE the return so it's available
   async function fetchBlogs() {
     try {
-      const res = await fetch('/api/blogs')
-      if (res.ok) { const data = await res.json(); setBlogs(data) }
-    } catch {}
-    setLoading(false)
+      const res = await fetch('/api/blogs');
+      if (res.ok) {
+        const data = await res.json();
+        setBlogs(data); 
+      }
+    } catch (err) {
+      console.error("Failed to fetch blogs:", err);
+    } finally {
+      setLoading(false);
+    }
   }
+
 
   function downloadMd(blog) {
     const content = '---\ntitle: "' + blog.metaTitle + '"\ndescription: "' + blog.metaDescription + '"\nprimary_keyword: "' + blog.primaryKeyword + '"\n---\n\n' + blog.finalBlog
