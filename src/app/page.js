@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import AuthModal from '@/components/AuthModal'
 
 const C = {
   bg: '#07070f',
@@ -18,6 +19,7 @@ export default function LandingPage() {
   const [topic, setTopic] = useState('')
   const [intent, setIntent] = useState('Informational')
   const [msg, setMsg] = useState('')
+  const [showAuth, setShowAuth] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(data => {
@@ -34,6 +36,11 @@ export default function LandingPage() {
     window.location.href = '/dashboard'
   }
 
+  const handleAuthSuccess = (userData) => {
+    setUser(userData)
+    setShowAuth(false)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.textPrimary, fontFamily: 'Inter, sans-serif' }}>
       {/* Header */}
@@ -44,9 +51,9 @@ export default function LandingPage() {
             {user ? (
               <a href="/dashboard" style={{ color: C.purpleLight, textDecoration: 'none', fontWeight: 600 }}>{user.email}</a>
             ) : (
-              <button onClick={() => window.location.href = '/login'} style={{ background: 'transparent', border: 'none', color: C.textSecondary, cursor: 'pointer', fontWeight: 600 }}>Sign In</button>
+              <button onClick={() => setShowAuth(true)} style={{ background: 'transparent', border: 'none', color: C.textSecondary, cursor: 'pointer', fontWeight: 600 }}>Sign In</button>
             )}
-            <button onClick={() => window.location.href = user ? '/dashboard' : '/login'} style={{ background: C.purple, color: '#fff', border: 'none', padding: '8px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+            <button onClick={() => user ? window.location.href = '/dashboard' : setShowAuth(true)} style={{ background: C.purple, color: '#fff', border: 'none', padding: '8px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
               {user ? 'My Account' : 'Sign Up'}
             </button>
           </div>
@@ -107,6 +114,8 @@ export default function LandingPage() {
       <style jsx>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
+
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onSuccess={handleAuthSuccess} />}
     </div>
   )
 }

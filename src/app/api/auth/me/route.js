@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client'
-import { cookies } from 'next/headers'
+export const dynamic = 'force-dynamic';
 
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
 
 export async function GET() {
   try {

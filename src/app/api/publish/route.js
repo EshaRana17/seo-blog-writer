@@ -1,5 +1,8 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
+
 export async function POST(req) {
   try {
     const session = await getSession()

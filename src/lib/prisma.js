@@ -6,8 +6,11 @@ const prismaClientSingleton = () => {
 
 const globalForPrisma = globalThis
 
-const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
+// 1. Define the instance
+const prismaInstance = globalForPrisma.prisma ?? prismaClientSingleton()
 
-export default prisma
+// 2. Export as BOTH default and named to satisfy all your API routes
+export const prisma = prismaInstance
+export default prismaInstance
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prismaInstance
